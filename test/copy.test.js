@@ -181,10 +181,15 @@ test('uses a single custom Copy item instead of native webview menu commands', (
 
 test('provides separate Fit and width-only Fit Width layouts', () => {
     const html = getPreviewHtml();
+    const pageRule = html.match(/html, body \{([\s\S]*?)\}/)[1];
+    const imageRule = html.match(/\n        #image \{([\s\S]*?)\}/)[1];
     const fitRule = html.match(/body\.fit #image \{([\s\S]*?)\}/)[1];
     const fitWidthCanvasRule = html.match(/body\.fit-width #canvas \{([\s\S]*?)\}/)[1];
     const fitWidthRule = html.match(/body\.fit-width #image \{([\s\S]*?)\}/)[1];
 
+    assert.match(pageRule, /padding: 0/);
+    assert.match(imageRule, /max-width: none/);
+    assert.match(imageRule, /max-height: none/);
     assert.match(fitRule, /max-width: 100vw/);
     assert.match(fitRule, /max-height: 100vh/);
     assert.match(fitWidthCanvasRule, /width: 100%/);

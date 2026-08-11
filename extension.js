@@ -240,6 +240,7 @@ class SvgPreviewProvider {
             width: 100%;
             height: 100%;
             margin: 0;
+            padding: 0;
             background: var(--vscode-editor-background);
             overflow: auto;
         }
@@ -261,6 +262,8 @@ class SvgPreviewProvider {
         #image {
             display: block;
             flex: none;
+            max-width: none;
+            max-height: none;
             margin: auto;
         }
         body.fit #image {
