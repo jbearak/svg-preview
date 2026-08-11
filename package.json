@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "jbearak",
   "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jbearak/image-preview.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -65,7 +69,7 @@
   },
   "scripts": {
     "check": "node --check extension.js && node --test test/*.test.js",
-    "package": "vsce package --allow-missing-repository",
+    "package": "vsce package",
     "test": "npm run check"
   }
 }
