@@ -2,17 +2,9 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const Module = require('node:module');
+const { loadExtension } = require('./load-extension');
 
-const originalLoad = Module._load;
-Module._load = function load(request, parent, isMain) {
-    if (request === 'vscode') {
-        return {};
-    }
-    return originalLoad(request, parent, isMain);
-};
-
-const { formatFileSize, zoomLabel } = require('../extension');
+const { formatFileSize, zoomLabel } = loadExtension({});
 
 test('formats file sizes like the built-in preview', () => {
     assert.equal(formatFileSize(500), '500B');

@@ -4,6 +4,7 @@
 const vscode = require('vscode');
 
 const VIEW_TYPE = 'jmb.svgPreview';
+const COPY_ERROR_MESSAGE = 'Unable to copy the SVG preview to the clipboard.';
 const DEFAULT_ZOOM = 'fitWidth';
 const ZOOM_LEVELS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10];
 
@@ -76,7 +77,6 @@ class SvgPreviewProvider {
 
         this.previews.add(preview);
         panel.webview.html = this.getHtml(preview);
-        await this.updateFileSize(preview);
 
         panel.webview.onDidReceiveMessage(message => {
             if (message.type === 'ready') {
@@ -89,6 +89,8 @@ class SvgPreviewProvider {
             } else if (message.type === 'dimensions') {
                 preview.dimensions = message.dimensions;
                 this.updateStatus(preview);
+            } else if (message.type === 'copyError') {
+                vscode.window.showErrorMessage(COPY_ERROR_MESSAGE);
             }
         });
 
@@ -110,6 +112,8 @@ class SvgPreviewProvider {
         if (panel.active) {
             this.setActivePreview(preview);
         }
+
+        await this.updateFileSize(preview);
     }
 
     /** @param {vscode.Uri} uri */
@@ -198,6 +202,23 @@ class SvgPreviewProvider {
         }
     }
 
+    async copyImage() {
+        const preview = this.activePreview;
+        if (!preview) {
+            return;
+        }
+
+        try {
+            preview.panel.reveal();
+            const delivered = await preview.panel.webview.postMessage({ type: 'copyImage' });
+            if (!delivered) {
+                vscode.window.showErrorMessage(COPY_ERROR_MESSAGE);
+            }
+        } catch {
+            vscode.window.showErrorMessage(COPY_ERROR_MESSAGE);
+        }
+    }
+
     /** @param {any} preview @param {string | number} zoom */
     setZoom(preview, zoom) {
         preview.zoom = zoom;
@@ -275,8 +296,8 @@ class SvgPreviewProvider {
         }
     </style>
 </head>
-<body class="fit-width">
-    <div id="canvas"><img id="image" src="${escapeHtml(src)}" alt=""></div>
+<body class="fit-width" data-vscode-context='{ "preventDefaultContextMenuItems": true }'>
+    <div id="canvas"><img id="image" src="${escapeHtml(src)}" crossorigin="anonymous" alt=""></div>
     <div id="error">Unable to load the SVG.</div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -330,6 +351,59 @@ class SvgPreviewProvider {
             applyZoom(next ?? (direction > 0 ? levels.at(-1) : levels[0]));
         }
 
+        function rasterizeImage() {
+            return new Promise((resolve, reject) => {
+                const width = image.naturalWidth;
+                const height = image.naturalHeight;
+                if (width > 16384 || height > 16384 || width * height > 64 * 1024 * 1024) {
+                    reject(new Error('The SVG is too large to copy safely'));
+                    return;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const context = canvas.getContext('2d');
+                if (!context) {
+                    reject(new Error('Unable to create a canvas context'));
+                    return;
+                }
+                context.drawImage(image, 0, 0);
+                canvas.toBlob(blob => {
+                    canvas.width = 0;
+                    canvas.height = 0;
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Unable to encode the image as PNG'));
+                    }
+                }, 'image/png');
+            });
+        }
+
+        async function copyImage(retries = 5) {
+            if (!document.hasFocus() && retries > 0) {
+                setTimeout(() => copyImage(retries - 1), 20);
+                return;
+            }
+
+            try {
+                if (!image.complete || !image.naturalWidth || !image.naturalHeight) {
+                    throw new Error('The SVG image is not loaded');
+                }
+                if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+                    throw new Error('Image clipboard writes are not supported');
+                }
+
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': rasterizeImage() })
+                ]);
+            } catch (error) {
+                console.error('Unable to copy SVG preview', error);
+                vscode.postMessage({ type: 'copyError' });
+            }
+        }
+
         image.addEventListener('load', () => {
             document.body.classList.remove('error');
             applyZoom(zoom, false);
@@ -344,6 +418,10 @@ class SvgPreviewProvider {
             document.body.classList.add('error');
         });
 
+        document.addEventListener('copy', () => {
+            copyImage();
+        });
+
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'setZoom') {
@@ -354,6 +432,8 @@ class SvgPreviewProvider {
                 stepZoom(-1);
             } else if (message.type === 'reload') {
                 image.src = message.src;
+            } else if (message.type === 'copyImage') {
+                copyImage();
             }
         });
     </script>
@@ -411,7 +491,8 @@ function activate(context) {
         }),
         vscode.commands.registerCommand('svgPreview.selectZoom', () => provider.selectZoom()),
         vscode.commands.registerCommand('svgPreview.zoomIn', () => provider.zoomIn()),
-        vscode.commands.registerCommand('svgPreview.zoomOut', () => provider.zoomOut())
+        vscode.commands.registerCommand('svgPreview.zoomOut', () => provider.zoomOut()),
+        vscode.commands.registerCommand('svgPreview.copyImage', () => provider.copyImage())
     );
 }
 
@@ -420,6 +501,7 @@ function deactivate() {}
 module.exports = {
     activate,
     deactivate,
+    SvgPreviewProvider,
     formatFileSize,
     zoomLabel
 };
