@@ -267,6 +267,9 @@ class SvgPreviewProvider {
             max-width: 100vw;
             max-height: 100vh;
         }
+        body.fit-width #canvas {
+            width: 100%;
+        }
         body.fit-width #image {
             width: 100%;
         }
