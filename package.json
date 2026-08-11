@@ -1,9 +1,9 @@
 {
-  "name": "svg-preview",
-  "displayName": "SVG Preview",
-  "description": "Preview SVG files against the current VS Code editor background, with adaptive zoom controls.",
+  "name": "image-preview",
+  "displayName": "SVG & PNG Preview",
+  "description": "Preview SVG and PNG files against the current VS Code editor background, with adaptive zoom controls.",
   "version": "0.1.0",
-  "publisher": "jmb",
+  "publisher": "jbearak",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,11 +16,14 @@
   "contributes": {
     "customEditors": [
       {
-        "viewType": "jmb.svgPreview",
-        "displayName": "SVG Preview",
+        "viewType": "jbearak.imagePreview",
+        "displayName": "SVG & PNG Preview",
         "selector": [
           {
-            "filenamePattern": "*.svg"
+            "filenamePattern": "*.[sS][vV][gG]"
+          },
+          {
+            "filenamePattern": "*.[pP][nN][gG]"
           }
         ],
         "priority": "default"
@@ -28,34 +31,34 @@
     ],
     "commands": [
       {
-        "command": "svgPreview.selectZoom",
+        "command": "imagePreview.selectZoom",
         "title": "Select Zoom",
-        "category": "SVG Preview"
+        "category": "SVG & PNG Preview"
       },
       {
-        "command": "svgPreview.zoomIn",
+        "command": "imagePreview.zoomIn",
         "title": "Zoom In",
-        "category": "SVG Preview"
+        "category": "SVG & PNG Preview"
       },
       {
-        "command": "svgPreview.zoomOut",
+        "command": "imagePreview.zoomOut",
         "title": "Zoom Out",
-        "category": "SVG Preview"
+        "category": "SVG & PNG Preview"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "svgPreview.selectZoom",
-          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+          "command": "imagePreview.selectZoom",
+          "when": "activeCustomEditorId == 'jbearak.imagePreview'"
         },
         {
-          "command": "svgPreview.zoomIn",
-          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+          "command": "imagePreview.zoomIn",
+          "when": "activeCustomEditorId == 'jbearak.imagePreview'"
         },
         {
-          "command": "svgPreview.zoomOut",
-          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+          "command": "imagePreview.zoomOut",
+          "when": "activeCustomEditorId == 'jbearak.imagePreview'"
         }
       ]
     }
