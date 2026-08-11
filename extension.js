@@ -6,6 +6,24 @@ const vscode = require('vscode');
 const VIEW_TYPE = 'jbearak.imagePreview';
 const COPY_DOWNSCALED_MESSAGE = 'The SVG was copied at a reduced resolution because its rendered size is too large.';
 const DEFAULT_ZOOM = 'fit';
+/** @typedef {{ extension: string, filenamePattern: string, label: string, mediaType: string, copyStrategy: 'rasterize' | 'source' }} ImageFormat */
+/** @type {readonly ImageFormat[]} */
+const SUPPORTED_FORMATS = Object.freeze([
+    Object.freeze({
+        extension: 'svg',
+        filenamePattern: '*.[sS][vV][gG]',
+        label: 'SVG',
+        mediaType: 'image/svg+xml',
+        copyStrategy: 'rasterize'
+    }),
+    Object.freeze({
+        extension: 'png',
+        filenamePattern: '*.[pP][nN][gG]',
+        label: 'PNG',
+        mediaType: 'image/png',
+        copyStrategy: 'source'
+    })
+]);
 /** @type {Record<string, string>} */
 const ZOOM_MODE_LABELS = {
     fit: 'Fit',
@@ -13,7 +31,7 @@ const ZOOM_MODE_LABELS = {
 };
 const ZOOM_LEVELS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10];
 
-class SvgPreviewProvider {
+class ImagePreviewProvider {
     /** @param {vscode.ExtensionContext} context */
     constructor(context) {
         this.context = context;
@@ -51,6 +69,7 @@ class SvgPreviewProvider {
 
     /** @param {vscode.Uri} uri */
     async openCustomDocument(uri) {
+        const format = getSupportedFormat(uri);
         const watcher = vscode.workspace.createFileSystemWatcher(
             new vscode.RelativePattern(vscode.Uri.joinPath(uri, '..'), '*')
         );
@@ -60,6 +79,7 @@ class SvgPreviewProvider {
 
         return {
             uri,
+            format,
             dispose() {
                 watcher.dispose();
             }
@@ -67,7 +87,7 @@ class SvgPreviewProvider {
     }
 
     /**
-     * @param {{ uri: vscode.Uri }} document
+     * @param {{ uri: vscode.Uri, format: ImageFormat }} document
      * @param {vscode.WebviewPanel} panel
      */
     async resolveCustomEditor(document, panel) {
@@ -79,7 +99,6 @@ class SvgPreviewProvider {
         const preview = {
             document,
             panel,
-            format: imageFormat(document.uri),
             zoom: DEFAULT_ZOOM,
             dimensions: '',
             fileSize: ''
@@ -101,7 +120,7 @@ class SvgPreviewProvider {
                 this.updateStatus(preview);
             } else if (message.type === 'copyError') {
                 vscode.window.showErrorMessage(
-                    `Unable to copy the ${preview.format.toUpperCase()} preview to the clipboard.`
+                    `Unable to copy the ${preview.document.format.label} preview to the clipboard.`
                 );
             } else if (message.type === 'copyDownscaled') {
                 vscode.window.showWarningMessage(COPY_DOWNSCALED_MESSAGE);
@@ -234,7 +253,7 @@ class SvgPreviewProvider {
         const nonce = createNonce();
         const src = this.getImageUri(preview, Date.now());
         const cspSource = preview.panel.webview.cspSource;
-        const formatLabel = preview.format.toUpperCase();
+        const format = preview.document.format;
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -324,7 +343,7 @@ class SvgPreviewProvider {
 </head>
 <body class="fit">
     <div id="canvas"><img id="image" src="${escapeHtml(src)}" crossorigin="anonymous" tabindex="0" alt=""></div>
-    <div id="error">Unable to load the ${escapeHtml(formatLabel)}.</div>
+    <div id="error">Unable to load the ${escapeHtml(format.label)}.</div>
     <div id="context-menu" role="menu" hidden><button type="button" role="menuitem">Copy</button></div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -332,7 +351,11 @@ class SvgPreviewProvider {
         const image = document.getElementById('image');
         const contextMenu = document.getElementById('context-menu');
         const copyButton = contextMenu.querySelector('button');
-        const format = ${JSON.stringify(preview.format)};
+        const format = ${JSON.stringify({
+            copyStrategy: format.copyStrategy,
+            label: format.label,
+            mediaType: format.mediaType
+        })};
         const levels = ${JSON.stringify(ZOOM_LEVELS)};
         ${numericZoomLayout.toString()}
         ${rasterLayout.toString()}
@@ -414,15 +437,15 @@ class SvgPreviewProvider {
             });
         }
 
-        async function originalPngBlob() {
+        async function originalImageBlob() {
             const response = await fetch(image.currentSrc || image.src);
             if (!response.ok) {
-                throw new Error('Unable to read the original PNG');
+                throw new Error('Unable to read the original ' + format.label);
             }
             const blob = await response.blob();
-            return blob.type === 'image/png'
+            return blob.type === format.mediaType
                 ? blob
-                : new Blob([blob], { type: 'image/png' });
+                : new Blob([blob], { type: format.mediaType });
         }
 
         async function copyImage() {
@@ -441,8 +464,8 @@ class SvgPreviewProvider {
 
                 let payload;
                 let downscaled = false;
-                if (format === 'png') {
-                    payload = originalPngBlob();
+                if (format.copyStrategy === 'source') {
+                    payload = originalImageBlob();
                 } else {
                     const bounds = image.getBoundingClientRect();
                     const layout = rasterLayout(
@@ -633,16 +656,14 @@ function zoomLabel(zoom) {
     return `${Math.round(Number(zoom) * 100)}%`;
 }
 
-/** @param {vscode.Uri | { path: string }} uri @returns {'svg' | 'png'} */
-function imageFormat(uri) {
-    const path = uri.path.toLowerCase();
-    if (path.endsWith('.svg')) {
-        return 'svg';
+/** @param {vscode.Uri | { path: string }} uri @returns {ImageFormat} */
+function getSupportedFormat(uri) {
+    const extension = uri.path.slice(uri.path.lastIndexOf('.') + 1).toLowerCase();
+    const format = SUPPORTED_FORMATS.find(candidate => candidate.extension === extension);
+    if (!format) {
+        throw new Error(`Unsupported image format: ${uri.path}`);
     }
-    if (path.endsWith('.png')) {
-        return 'png';
-    }
-    throw new Error(`Unsupported image format: ${uri.path}`);
+    return format;
 }
 
 function createNonce() {
@@ -665,7 +686,7 @@ function escapeHtml(value) {
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
-    const provider = new SvgPreviewProvider(context);
+    const provider = new ImagePreviewProvider(context);
     context.subscriptions.push(
         vscode.window.registerCustomEditorProvider(VIEW_TYPE, provider, {
             supportsMultipleEditorsPerDocument: true
@@ -681,9 +702,10 @@ function deactivate() {}
 module.exports = {
     activate,
     deactivate,
-    SvgPreviewProvider,
+    ImagePreviewProvider,
+    SUPPORTED_FORMATS,
     formatFileSize,
-    imageFormat,
+    getSupportedFormat,
     numericZoomLayout,
     rasterLayout,
     zoomLabel
