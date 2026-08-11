@@ -1,0 +1,67 @@
+{
+  "name": "svg-preview",
+  "displayName": "SVG Preview",
+  "description": "Preview SVG files against the current VS Code editor background, with fit-width zoom by default.",
+  "version": "0.1.0",
+  "publisher": "jmb",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "jmb.svgPreview",
+        "displayName": "SVG Preview",
+        "selector": [
+          {
+            "filenamePattern": "*.svg"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "commands": [
+      {
+        "command": "svgPreview.selectZoom",
+        "title": "Select Zoom",
+        "category": "SVG Preview"
+      },
+      {
+        "command": "svgPreview.zoomIn",
+        "title": "Zoom In",
+        "category": "SVG Preview"
+      },
+      {
+        "command": "svgPreview.zoomOut",
+        "title": "Zoom Out",
+        "category": "SVG Preview"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "svgPreview.selectZoom",
+          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+        },
+        {
+          "command": "svgPreview.zoomIn",
+          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+        },
+        {
+          "command": "svgPreview.zoomOut",
+          "when": "activeCustomEditorId == 'jmb.svgPreview'"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "check": "node --check extension.js && node --test test/*.test.js",
+    "test": "npm run check"
+  }
+}
