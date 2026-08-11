@@ -27,5 +27,5 @@ palette also provides **SVG & PNG Preview: Zoom In** and
 
 ## License
 
-Copyright (c) 2026 Jonathan Marc Bearak. Licensed under the GNU General Public License,
+Copyright 2026 Jonathan Marc Bearak. Licensed under the GNU General Public License,
 version 3. See [LICENSE](LICENSE).
