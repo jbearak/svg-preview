@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { loadExtension } = require('./load-extension');
 
-const { formatFileSize, imageFormat, numericZoomLayout, rasterLayout, zoomLabel } = loadExtension({});
+const { formatFileSize, getSupportedFormat, numericZoomLayout, rasterLayout, zoomLabel } = loadExtension({});
 
 test('formats file sizes like the built-in preview', () => {
     assert.equal(formatFileSize(500), '500B');
@@ -19,13 +19,13 @@ test('formats zoom labels', () => {
     assert.equal(zoomLabel(1.5), '150%');
 });
 
-test('detects SVG and PNG formats without case sensitivity', () => {
-    assert.equal(imageFormat({ path: '/images/icon.svg' }), 'svg');
-    assert.equal(imageFormat({ path: '/images/icon.SvG' }), 'svg');
-    assert.equal(imageFormat({ path: '/images/photo.png' }), 'png');
-    assert.equal(imageFormat({ path: '/images/photo.PnG' }), 'png');
-    assert.throws(() => imageFormat({ path: '/images/photo.png.backup' }), /Unsupported image format/);
-    assert.throws(() => imageFormat({ path: '/images/photo.jpg' }), /Unsupported image format/);
+test('resolves SVG and PNG descriptors without case sensitivity', () => {
+    assert.equal(getSupportedFormat({ path: '/images/icon.svg' }).extension, 'svg');
+    assert.equal(getSupportedFormat({ path: '/images/icon.SvG' }).extension, 'svg');
+    assert.equal(getSupportedFormat({ path: '/images/photo.png' }).extension, 'png');
+    assert.equal(getSupportedFormat({ path: '/images/photo.PnG' }).extension, 'png');
+    assert.throws(() => getSupportedFormat({ path: '/images/photo.png.backup' }), /Unsupported image format/);
+    assert.throws(() => getSupportedFormat({ path: '/images/photo.jpg' }), /Unsupported image format/);
 });
 
 test('sizes the canvas to contain numeric zoom levels', () => {

@@ -102,7 +102,7 @@ test('watches standalone documents and keeps status IDs stable', async () => {
     const records = {};
     const extension = loadExtension(createVscodeStub('preview', calls, records));
     const context = { subscriptions: { push() {} } };
-    const provider = new extension.SvgPreviewProvider(context);
+    const provider = new extension.ImagePreviewProvider(context);
     const refreshed = [];
     provider.refresh = uri => refreshed.push(uri);
     const uri = {
@@ -115,6 +115,8 @@ test('watches standalone documents and keeps status IDs stable', async () => {
     const document = await provider.openCustomDocument(uri);
     const watcher = records.watchers[0];
 
+    assert.equal(document.format.extension, 'png');
+    assert.equal(document.format.copyStrategy, 'source');
     assert.equal(watcher.pattern.baseUri.path, '/outside');
     assert.equal(watcher.pattern.pattern, '*');
     assert.deepEqual(watcher.events, ['change', 'create', 'delete']);
@@ -129,4 +131,36 @@ test('watches standalone documents and keeps status IDs stable', async () => {
         'imagePreview.dimensions',
         'imagePreview.fileSize'
     ]);
+});
+
+test('carries the document format descriptor into editor resolution', async () => {
+    const extension = loadExtension(createVscodeStub('preview', [], {}));
+    const provider = new extension.ImagePreviewProvider({ subscriptions: { push() {} } });
+    const uri = {
+        path: '/outside/photo.PnG',
+        toString() {
+            return 'file:///outside/photo.PnG';
+        }
+    };
+    const document = await provider.openCustomDocument(uri);
+    let resolvedPreview;
+    provider.getHtml = preview => {
+        resolvedPreview = preview;
+        return '<html></html>';
+    };
+    const panel = {
+        active: false,
+        webview: {
+            onDidReceiveMessage() {},
+            postMessage() {}
+        },
+        onDidChangeViewState() {},
+        onDidDispose() {}
+    };
+
+    await provider.resolveCustomEditor(document, panel);
+
+    assert.equal(resolvedPreview.document.format, document.format);
+    assert.equal(resolvedPreview.document.format.extension, 'png');
+    assert.equal(Object.hasOwn(resolvedPreview, 'format'), false);
 });

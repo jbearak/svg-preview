@@ -6,13 +6,15 @@ const vm = require('node:vm');
 const manifest = require('../package.json');
 const { loadExtension } = require('./load-extension');
 
-const { SvgPreviewProvider } = loadExtension({});
+const { ImagePreviewProvider, getSupportedFormat } = loadExtension({});
 
 function getPreviewHtml(format = 'svg') {
-    const provider = Object.create(SvgPreviewProvider.prototype);
+    const provider = Object.create(ImagePreviewProvider.prototype);
     provider.getImageUri = () => `webview://preview/image.${format}`;
     return provider.getHtml({
-        format,
+        document: {
+            format: getSupportedFormat({ path: `/image.${format}` })
+        },
         panel: {
             webview: {
                 cspSource: 'webview-source'

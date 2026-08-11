@@ -3,6 +3,9 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const manifest = require('../package.json');
+const { loadExtension } = require('./load-extension');
+
+const { SUPPORTED_FORMATS } = loadExtension({});
 const editor = manifest.contributes.customEditors[0];
 
 test('uses the image-preview marketplace and command identity', () => {
@@ -14,18 +17,22 @@ test('uses the image-preview marketplace and command identity', () => {
     assert.equal(editor.priority, 'default');
     assert.deepEqual(
         editor.selector.map(selector => selector.filenamePattern),
-        ['*.[sS][vV][gG]', '*.[pP][nN][gG]']
+        SUPPORTED_FORMATS.map(format => format.filenamePattern)
     );
+    const commandIds = manifest.contributes.commands.map(({ command }) => command);
+    const paletteItems = manifest.contributes.menus.commandPalette;
+
     assert.deepEqual(
-        manifest.contributes.commands.map(command => command.command),
+        commandIds,
         ['imagePreview.selectZoom', 'imagePreview.zoomIn', 'imagePreview.zoomOut']
     );
     assert.deepEqual(
-        manifest.contributes.menus.commandPalette.map(item => item.when),
-        [
-            "activeCustomEditorId == 'jbearak.imagePreview'",
-            "activeCustomEditorId == 'jbearak.imagePreview'",
-            "activeCustomEditorId == 'jbearak.imagePreview'"
-        ]
+        paletteItems.map(({ command }) => command),
+        commandIds
+    );
+    assert.ok(
+        paletteItems.every(
+            ({ when }) => when === `activeCustomEditorId == '${editor.viewType}'`
+        )
     );
 });
