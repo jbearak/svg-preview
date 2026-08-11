@@ -13,7 +13,16 @@ current editor background instead of a checkerboard.
 
 ## Use
 
-After installing the extension, open an SVG. If VS Code asks which editor to
+Build and install the extension into every supported editor found locally:
+
+```sh
+./scripts/setup.sh
+```
+
+The setup script supports VS Code, VS Code Insiders, VSCodium, Kiro,
+Antigravity, Cursor, and Windsurf.
+
+After installation, open an SVG. If VS Code asks which editor to
 use, choose **SVG Preview**. To make the choice persistent, run
 **View: Reopen Editor With...**, choose **Configure default editor for `*.svg`**,
 and select **SVG Preview**.

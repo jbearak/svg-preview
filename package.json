@@ -62,6 +62,7 @@
   },
   "scripts": {
     "check": "node --check extension.js && node --test test/*.test.js",
+    "package": "vsce package --allow-missing-repository",
     "test": "npm run check"
   }
 }
