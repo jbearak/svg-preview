@@ -243,6 +243,9 @@ class SvgPreviewProvider {
             align-items: flex-start;
             box-sizing: border-box;
         }
+        body.numeric-zoom #canvas {
+            flex: none;
+        }
         #image {
             display: block;
             flex: none;
@@ -271,8 +274,10 @@ class SvgPreviewProvider {
     <div id="error">Unable to load the SVG.</div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
+        const canvas = document.getElementById('canvas');
         const image = document.getElementById('image');
         const levels = ${JSON.stringify(ZOOM_LEVELS)};
+        ${numericZoomLayout.toString()}
         let zoom = vscode.getState()?.zoom ?? ${JSON.stringify(DEFAULT_ZOOM)};
         if (zoom === 'fit') {
             zoom = ${JSON.stringify(DEFAULT_ZOOM)};
@@ -295,7 +300,10 @@ class SvgPreviewProvider {
 
         function applyZoom(nextZoom, report = true) {
             zoom = nextZoom;
-            document.body.classList.remove('fit-width');
+            document.body.classList.toggle('fit-width', zoom === 'fitWidth');
+            document.body.classList.toggle('numeric-zoom', zoom !== 'fitWidth');
+            canvas.style.width = '';
+            canvas.style.height = '';
             image.style.width = '';
             image.style.height = '';
 
@@ -304,8 +312,11 @@ class SvgPreviewProvider {
             } else {
                 const width = image.naturalWidth || image.clientWidth || 1;
                 const height = image.naturalHeight || image.clientHeight || 1;
-                image.style.width = Math.round(width * zoom) + 'px';
-                image.style.height = Math.round(height * zoom) + 'px';
+                const layout = numericZoomLayout(width, height, zoom);
+                image.style.width = layout.imageWidth;
+                image.style.height = layout.imageHeight;
+                canvas.style.width = layout.canvasWidth;
+                canvas.style.height = layout.canvasHeight;
             }
 
             vscode.setState({ zoom });
@@ -351,6 +362,18 @@ class SvgPreviewProvider {
 </body>
 </html>`;
     }
+}
+
+/** @param {number} width @param {number} height @param {number} zoom */
+function numericZoomLayout(width, height, zoom) {
+    const scaledWidth = Math.round(width * zoom);
+    const scaledHeight = Math.round(height * zoom);
+    return {
+        imageWidth: `${scaledWidth}px`,
+        imageHeight: `${scaledHeight}px`,
+        canvasWidth: `max(100%, ${scaledWidth}px)`,
+        canvasHeight: `max(100%, ${scaledHeight}px)`
+    };
 }
 
 /** @param {number} bytes */
@@ -409,5 +432,6 @@ module.exports = {
     activate,
     deactivate,
     formatFileSize,
+    numericZoomLayout,
     zoomLabel
 };
