@@ -22,6 +22,6 @@ test('formats file sizes like the built-in preview', () => {
 
 test('formats zoom labels', () => {
     assert.equal(zoomLabel('fitWidth'), 'Fit Width');
-    assert.equal(zoomLabel('fit'), 'Whole Image');
+    assert.equal(zoomLabel(1), '100%');
     assert.equal(zoomLabel(1.5), '150%');
 });

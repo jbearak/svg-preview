@@ -172,7 +172,6 @@ class SvgPreviewProvider {
 
         const choices = [
             { label: 'Fit Width', zoom: 'fitWidth' },
-            { label: 'Whole Image', zoom: 'fit' },
             { label: 'Actual Size', zoom: 1 },
             ...ZOOM_LEVELS
                 .filter(level => level !== 1)
@@ -240,26 +239,18 @@ class SvgPreviewProvider {
             min-width: 100%;
             min-height: 100%;
             display: flex;
-            justify-content: center;
-            align-items: center;
+            justify-content: flex-start;
+            align-items: flex-start;
             box-sizing: border-box;
         }
         #image {
             display: block;
             flex: none;
-        }
-        body.fit-width #canvas {
-            align-items: flex-start;
+            margin: auto;
         }
         body.fit-width #image {
             width: 100%;
             height: auto;
-        }
-        body.fit #image {
-            width: auto;
-            height: auto;
-            max-width: 100vw;
-            max-height: 100vh;
         }
         #error {
             display: none;
@@ -283,6 +274,10 @@ class SvgPreviewProvider {
         const image = document.getElementById('image');
         const levels = ${JSON.stringify(ZOOM_LEVELS)};
         let zoom = vscode.getState()?.zoom ?? ${JSON.stringify(DEFAULT_ZOOM)};
+        if (zoom === 'fit') {
+            zoom = ${JSON.stringify(DEFAULT_ZOOM)};
+            vscode.setState({ zoom });
+        }
 
         function labelDimensions() {
             return image.naturalWidth + 'x' + image.naturalHeight;
@@ -300,16 +295,12 @@ class SvgPreviewProvider {
 
         function applyZoom(nextZoom, report = true) {
             zoom = nextZoom;
-            document.body.classList.remove('fit-width', 'fit', 'error');
+            document.body.classList.remove('fit-width');
             image.style.width = '';
             image.style.height = '';
-            image.style.maxWidth = '';
-            image.style.maxHeight = '';
 
             if (zoom === 'fitWidth') {
                 document.body.classList.add('fit-width');
-            } else if (zoom === 'fit') {
-                document.body.classList.add('fit');
             } else {
                 const width = image.naturalWidth || image.clientWidth || 1;
                 const height = image.naturalHeight || image.clientHeight || 1;
@@ -377,9 +368,6 @@ function formatFileSize(bytes) {
 function zoomLabel(zoom) {
     if (zoom === 'fitWidth') {
         return 'Fit Width';
-    }
-    if (zoom === 'fit') {
-        return 'Whole Image';
     }
     return `${Math.round(Number(zoom) * 100)}%`;
 }
