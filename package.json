@@ -1,7 +1,7 @@
 {
   "name": "svg-preview",
   "displayName": "SVG Preview",
-  "description": "Preview SVG files against the current VS Code editor background, with fit-width zoom by default.",
+  "description": "Preview SVG files against the current VS Code editor background, with adaptive zoom controls.",
   "version": "0.1.0",
   "publisher": "jmb",
   "license": "MIT",

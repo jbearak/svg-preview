@@ -6,7 +6,12 @@ const vscode = require('vscode');
 const VIEW_TYPE = 'jmb.svgPreview';
 const COPY_ERROR_MESSAGE = 'Unable to copy the SVG preview to the clipboard.';
 const COPY_DOWNSCALED_MESSAGE = 'The SVG was copied at a reduced resolution because its rendered size is too large.';
-const DEFAULT_ZOOM = 'fitWidth';
+const DEFAULT_ZOOM = 'fit';
+/** @type {Record<string, string>} */
+const ZOOM_MODE_LABELS = {
+    fit: 'Fit',
+    fitWidth: 'Fit Width'
+};
 const ZOOM_LEVELS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10];
 
 class SvgPreviewProvider {
@@ -178,7 +183,7 @@ class SvgPreviewProvider {
         }
 
         const choices = [
-            { label: 'Fit Width', zoom: 'fitWidth' },
+            ...Object.entries(ZOOM_MODE_LABELS).map(([zoom, label]) => ({ label, zoom })),
             { label: 'Actual Size', zoom: 1 },
             ...ZOOM_LEVELS
                 .filter(level => level !== 1)
@@ -258,9 +263,12 @@ class SvgPreviewProvider {
             flex: none;
             margin: auto;
         }
+        body.fit #image {
+            max-width: 100vw;
+            max-height: 100vh;
+        }
         body.fit-width #image {
             width: 100%;
-            height: auto;
         }
         #error {
             display: none;
@@ -301,7 +309,7 @@ class SvgPreviewProvider {
         }
     </style>
 </head>
-<body class="fit-width">
+<body class="fit">
     <div id="canvas"><img id="image" src="${escapeHtml(src)}" crossorigin="anonymous" tabindex="0" alt=""></div>
     <div id="error">Unable to load the SVG.</div>
     <div id="context-menu" role="menu" hidden><button type="button" role="menuitem">Copy</button></div>
@@ -315,10 +323,6 @@ class SvgPreviewProvider {
         ${numericZoomLayout.toString()}
         ${rasterLayout.toString()}
         let zoom = vscode.getState()?.zoom ?? ${JSON.stringify(DEFAULT_ZOOM)};
-        if (zoom === 'fit') {
-            zoom = ${JSON.stringify(DEFAULT_ZOOM)};
-            vscode.setState({ zoom });
-        }
         let copyInFlight = false;
 
         function isImageReady() {
@@ -341,16 +345,17 @@ class SvgPreviewProvider {
 
         function applyZoom(nextZoom, report = true) {
             zoom = nextZoom;
-            document.body.classList.toggle('fit-width', zoom === 'fitWidth');
-            document.body.classList.toggle('numeric-zoom', zoom !== 'fitWidth');
+            const isFit = zoom === 'fit';
+            const isFitWidth = zoom === 'fitWidth';
+            document.body.classList.toggle('fit', isFit);
+            document.body.classList.toggle('fit-width', isFitWidth);
+            document.body.classList.toggle('numeric-zoom', !isFit && !isFitWidth);
             canvas.style.width = '';
             canvas.style.height = '';
             image.style.width = '';
             image.style.height = '';
 
-            if (zoom === 'fitWidth') {
-                document.body.classList.add('fit-width');
-            } else {
+            if (!isFit && !isFitWidth) {
                 const width = image.naturalWidth || image.clientWidth || 1;
                 const height = image.naturalHeight || image.clientHeight || 1;
                 const layout = numericZoomLayout(width, height, zoom);
@@ -588,8 +593,8 @@ function formatFileSize(bytes) {
 
 /** @param {string | number} zoom */
 function zoomLabel(zoom) {
-    if (zoom === 'fitWidth') {
-        return 'Fit Width';
+    if (typeof zoom === 'string' && ZOOM_MODE_LABELS[zoom]) {
+        return ZOOM_MODE_LABELS[zoom];
     }
     return `${Math.round(Number(zoom) * 100)}%`;
 }

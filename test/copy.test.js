@@ -58,7 +58,7 @@ function createClassList() {
     };
 }
 
-function runPreviewScript({ imageReady = true } = {}) {
+function runPreviewScript({ imageReady = true, storedState } = {}) {
     const html = getPreviewHtml();
     const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
     const messages = [];
@@ -131,7 +131,7 @@ function runPreviewScript({ imageReady = true } = {}) {
         acquireVsCodeApi() {
             return {
                 getState() {
-                    return undefined;
+                    return storedState;
                 },
                 setState() {},
                 postMessage(message) {
@@ -156,7 +156,18 @@ function runPreviewScript({ imageReady = true } = {}) {
         window
     });
 
-    return { clipboardWrites, contextMenu, copyButton, document, drawCalls, image, messages };
+    return {
+        body,
+        clipboardWrites,
+        contextMenu,
+        copyButton,
+        document,
+        drawCalls,
+        image,
+        messages,
+        previewCanvas,
+        window
+    };
 }
 
 test('uses a single custom Copy item instead of native webview menu commands', () => {
@@ -166,6 +177,49 @@ test('uses a single custom Copy item instead of native webview menu commands', (
     assert.equal(html.match(/role="menuitem"/g)?.length, 1);
     assert.match(html, />Copy<\/button>/);
     assert.doesNotMatch(html, />Cut<|>Paste</);
+});
+
+test('provides separate Fit and width-only Fit Width layouts', () => {
+    const html = getPreviewHtml();
+    const fitRule = html.match(/body\.fit #image \{([\s\S]*?)\}/)[1];
+    const fitWidthRule = html.match(/body\.fit-width #image \{([\s\S]*?)\}/)[1];
+
+    assert.match(fitRule, /max-width: 100vw/);
+    assert.match(fitRule, /max-height: 100vh/);
+    assert.match(fitWidthRule, /width: 100%/);
+    assert.doesNotMatch(fitWidthRule, /max-height/);
+});
+
+test('switches between Fit, Fit Width, and numeric zoom layouts', () => {
+    const preview = runPreviewScript();
+
+    preview.window.dispatch('message', { data: { type: 'setZoom', zoom: 2 } });
+    assert.equal(preview.body.classList.contains('numeric-zoom'), true);
+    assert.equal(preview.image.style.height, '100px');
+
+    preview.window.dispatch('message', { data: { type: 'setZoom', zoom: 'fit' } });
+    assert.equal(preview.body.classList.contains('fit'), true);
+    assert.equal(preview.body.classList.contains('fit-width'), false);
+    assert.equal(preview.body.classList.contains('numeric-zoom'), false);
+    assert.equal(preview.image.style.height, '');
+
+    preview.window.dispatch('message', { data: { type: 'setZoom', zoom: 'fitWidth' } });
+    assert.equal(preview.body.classList.contains('fit'), false);
+    assert.equal(preview.body.classList.contains('fit-width'), true);
+    assert.equal(preview.body.classList.contains('numeric-zoom'), false);
+    assert.equal(preview.previewCanvas.style.height, '');
+    assert.equal(preview.image.style.height, '');
+});
+
+test('restores Fit as a persisted zoom mode', () => {
+    const preview = runPreviewScript({ storedState: { zoom: 'fit' } });
+
+    preview.image.dispatch('load');
+
+    assert.equal(preview.body.classList.contains('fit'), true);
+    assert.equal(preview.messages.at(-1).type, 'ready');
+    assert.equal(preview.messages.at(-1).dimensions, '100x50');
+    assert.equal(preview.messages.at(-1).zoom, 'fit');
 });
 
 test('suppresses native edit actions while the preview is unavailable', () => {

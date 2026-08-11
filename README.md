@@ -6,8 +6,8 @@ current editor background instead of a checkerboard.
 ## Features
 
 - Uses `var(--vscode-editor-background)` behind the SVG.
-- Opens at **Fit Width** by default.
-- Offers Fit Width, Actual Size, and percentage zoom levels.
+- Opens at **Fit** by default, keeping the entire SVG visible.
+- Offers Fit, Fit Width, Actual Size, and percentage zoom levels.
 - Shows zoom, intrinsic dimensions, and file size in the status bar.
 - Refreshes when an SVG changes on disk.
 - Copies the rendered SVG as a transparent PNG from the preview context menu.
@@ -28,7 +28,8 @@ use, choose **SVG Preview**. To make the choice persistent, run
 **View: Reopen Editor With...**, choose **Configure default editor for `*.svg`**,
 and select **SVG Preview**.
 
-Click **Fit Width** in the status bar to choose another zoom level. The command
+Click **Fit** in the status bar to choose another zoom level. **Fit Width** fills
+the available width and allows vertical scrolling for tall SVGs. The command
 palette also provides **SVG Preview: Zoom In** and **SVG Preview: Zoom Out**.
 
 ## Development
