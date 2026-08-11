@@ -41,11 +41,6 @@
         "command": "svgPreview.zoomOut",
         "title": "Zoom Out",
         "category": "SVG Preview"
-      },
-      {
-        "command": "svgPreview.copyImage",
-        "title": "Copy",
-        "category": "SVG Preview"
       }
     ],
     "menus": {
@@ -61,16 +56,6 @@
         {
           "command": "svgPreview.zoomOut",
           "when": "activeCustomEditorId == 'jmb.svgPreview'"
-        },
-        {
-          "command": "svgPreview.copyImage",
-          "when": "false"
-        }
-      ],
-      "webview/context": [
-        {
-          "command": "svgPreview.copyImage",
-          "when": "webviewId == 'jmb.svgPreview'"
         }
       ]
     }
