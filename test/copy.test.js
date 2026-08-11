@@ -8,10 +8,11 @@ const { loadExtension } = require('./load-extension');
 
 const { SvgPreviewProvider } = loadExtension({});
 
-function getPreviewHtml() {
+function getPreviewHtml(format = 'svg') {
     const provider = Object.create(SvgPreviewProvider.prototype);
-    provider.getImageUri = () => 'webview://preview/image.svg';
+    provider.getImageUri = () => `webview://preview/image.${format}`;
     return provider.getHtml({
+        format,
         panel: {
             webview: {
                 cspSource: 'webview-source'
@@ -58,20 +59,32 @@ function createClassList() {
     };
 }
 
-function runPreviewScript({ imageReady = true, storedState } = {}) {
-    const html = getPreviewHtml();
+function runPreviewScript({
+    fetchOk = true,
+    format = 'svg',
+    imageReady = true,
+    sourceBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3]),
+    sourceType = 'image/png',
+    storedState
+} = {}) {
+    const html = getPreviewHtml(format);
     const script = html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];
     const messages = [];
     const clipboardWrites = [];
     const drawCalls = [];
+    const fetchCalls = [];
+    let canvasCreations = 0;
     const body = { classList: createClassList() };
     const previewCanvas = { style: {} };
+    const imageSrc = `webview://preview/image.${format}`;
     const image = createEventTarget({
         complete: imageReady,
+        currentSrc: imageSrc,
         naturalWidth: imageReady ? 100 : 0,
         naturalHeight: imageReady ? 50 : 0,
         clientWidth: 100,
         clientHeight: 50,
+        src: imageSrc,
         style: {},
         focus() {},
         getBoundingClientRect() {
@@ -99,6 +112,7 @@ function runPreviewScript({ imageReady = true, storedState } = {}) {
         },
         createElement(tag) {
             assert.equal(tag, 'canvas');
+            canvasCreations += 1;
             return {
                 width: 0,
                 height: 0,
@@ -110,7 +124,7 @@ function runPreviewScript({ imageReady = true, storedState } = {}) {
                     };
                 },
                 toBlob(callback) {
-                    callback({ type: 'image/png' });
+                    callback(new Blob(['rendered'], { type: 'image/png' }));
                 }
             };
         }
@@ -139,15 +153,26 @@ function runPreviewScript({ imageReady = true, storedState } = {}) {
                 }
             };
         },
+        Blob,
         ClipboardItem,
-        console,
+        console: { error() {} },
         devicePixelRatio: 2,
         document,
+        async fetch(url) {
+            fetchCalls.push(url);
+            return {
+                ok: fetchOk,
+                async blob() {
+                    return new Blob([sourceBytes], { type: sourceType });
+                }
+            };
+        },
         innerHeight: 600,
         innerWidth: 800,
         navigator: {
             clipboard: {
                 async write(items) {
+                    await Promise.all(Object.values(items[0].data));
                     clipboardWrites.push(items);
                 }
             }
@@ -158,16 +183,24 @@ function runPreviewScript({ imageReady = true, storedState } = {}) {
 
     return {
         body,
+        get canvasCreations() {
+            return canvasCreations;
+        },
         clipboardWrites,
         contextMenu,
         copyButton,
         document,
         drawCalls,
+        fetchCalls,
         image,
         messages,
         previewCanvas,
         window
     };
+}
+
+async function flushCopy() {
+    await new Promise(resolve => setImmediate(resolve));
 }
 
 test('uses a single custom Copy item instead of native webview menu commands', () => {
@@ -177,6 +210,22 @@ test('uses a single custom Copy item instead of native webview menu commands', (
     assert.equal(html.match(/role="menuitem"/g)?.length, 1);
     assert.match(html, />Copy<\/button>/);
     assert.doesNotMatch(html, />Cut<|>Paste</);
+});
+
+test('limits webview connections to its resource source', () => {
+    const html = getPreviewHtml('png');
+    const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
+
+    assert.match(csp, /default-src 'none'/);
+    assert.match(csp, /img-src webview-source/);
+    assert.match(csp, /connect-src webview-source/);
+    assert.doesNotMatch(csp, /connect-src \*/);
+    assert.doesNotMatch(csp, /https:|http:|data:|blob:/);
+});
+
+test('shows format-specific load errors', () => {
+    assert.match(getPreviewHtml('svg'), /Unable to load the SVG\./);
+    assert.match(getPreviewHtml('png'), /Unable to load the PNG\./);
 });
 
 test('provides separate Fit and width-only Fit Width layouts', () => {
@@ -267,8 +316,8 @@ test('keeps keyboard navigation inside the single-item menu', () => {
     assert.equal(preview.contextMenu.hidden, true);
 });
 
-test('copies the preview as PNG from the custom context menu', async () => {
-    const preview = runPreviewScript();
+test('copies SVG from the rendered canvas', async () => {
+    const preview = runPreviewScript({ format: 'svg' });
     let prevented = false;
 
     preview.document.dispatch('contextmenu', {
@@ -283,11 +332,58 @@ test('copies the preview as PNG from the custom context menu', async () => {
     assert.equal(preview.contextMenu.hidden, false);
 
     preview.copyButton.dispatch('click');
-    await new Promise(resolve => setImmediate(resolve));
+    await flushCopy();
 
     assert.equal(preview.clipboardWrites.length, 1);
     const item = preview.clipboardWrites[0][0];
     assert.equal((await item.data['image/png']).type, 'image/png');
+    assert.equal(preview.canvasCreations, 1);
     assert.equal(preview.drawCalls.length, 1);
     assert.deepEqual(preview.drawCalls[0].slice(1), [0, 0, 200, 100]);
+    assert.deepEqual(preview.fetchCalls, []);
+});
+
+test('copies the original PNG payload without rasterizing it', async () => {
+    const sourceBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 42]);
+    const preview = runPreviewScript({ format: 'png', sourceBytes });
+
+    preview.copyButton.dispatch('click');
+    await flushCopy();
+
+    assert.deepEqual(preview.fetchCalls, ['webview://preview/image.png']);
+    assert.equal(preview.clipboardWrites.length, 1);
+    const blob = await preview.clipboardWrites[0][0].data['image/png'];
+    assert.equal(blob.type, 'image/png');
+    assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), sourceBytes);
+    assert.equal(preview.canvasCreations, 0);
+    assert.deepEqual(preview.drawCalls, []);
+    assert.equal(preview.messages.some(message => message.type === 'copyDownscaled'), false);
+});
+
+test('normalizes PNG clipboard type without changing its bytes', async () => {
+    const sourceBytes = new Uint8Array([1, 2, 3, 4]);
+    const preview = runPreviewScript({
+        format: 'png',
+        sourceBytes,
+        sourceType: 'application/octet-stream'
+    });
+
+    preview.copyButton.dispatch('click');
+    await flushCopy();
+
+    const blob = await preview.clipboardWrites[0][0].data['image/png'];
+    assert.equal(blob.type, 'image/png');
+    assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), sourceBytes);
+});
+
+test('reports PNG fetch failures without falling back to canvas', async () => {
+    const preview = runPreviewScript({ fetchOk: false, format: 'png' });
+
+    preview.copyButton.dispatch('click');
+    await flushCopy();
+
+    assert.equal(preview.clipboardWrites.length, 0);
+    assert.equal(preview.canvasCreations, 0);
+    assert.equal(preview.messages.filter(message => message.type === 'copyError').length, 1);
+    assert.equal(preview.messages.some(message => message.type === 'copyDownscaled'), false);
 });

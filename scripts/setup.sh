@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# SVG Preview Setup Script
+# SVG & PNG Preview Setup Script
 # Validates and packages the extension, then installs it to supported editors.
 #
 # USAGE:
@@ -29,7 +29,7 @@ if ! command -v vsce &> /dev/null; then
     exit 1
 fi
 
-echo "=== SVG Preview Setup ==="
+echo "=== SVG & PNG Preview Setup ==="
 echo ""
 
 GREEN='\033[0;32m'
