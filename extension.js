@@ -4,6 +4,8 @@
 const vscode = require('vscode');
 
 const VIEW_TYPE = 'jmb.svgPreview';
+const COPY_ERROR_MESSAGE = 'Unable to copy the SVG preview to the clipboard.';
+const COPY_DOWNSCALED_MESSAGE = 'The SVG was copied at a reduced resolution because its rendered size is too large.';
 const DEFAULT_ZOOM = 'fitWidth';
 const ZOOM_LEVELS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10];
 
@@ -76,7 +78,6 @@ class SvgPreviewProvider {
 
         this.previews.add(preview);
         panel.webview.html = this.getHtml(preview);
-        await this.updateFileSize(preview);
 
         panel.webview.onDidReceiveMessage(message => {
             if (message.type === 'ready') {
@@ -89,6 +90,10 @@ class SvgPreviewProvider {
             } else if (message.type === 'dimensions') {
                 preview.dimensions = message.dimensions;
                 this.updateStatus(preview);
+            } else if (message.type === 'copyError') {
+                vscode.window.showErrorMessage(COPY_ERROR_MESSAGE);
+            } else if (message.type === 'copyDownscaled') {
+                vscode.window.showWarningMessage(COPY_DOWNSCALED_MESSAGE);
             }
         });
 
@@ -110,6 +115,8 @@ class SvgPreviewProvider {
         if (panel.active) {
             this.setActivePreview(preview);
         }
+
+        void this.updateFileSize(preview);
     }
 
     /** @param {vscode.Uri} uri */
@@ -267,21 +274,55 @@ class SvgPreviewProvider {
         body.error #error {
             display: block;
         }
+        #context-menu {
+            position: fixed;
+            z-index: 1;
+            min-width: 120px;
+            padding: 4px;
+            background: var(--vscode-menu-background);
+            border: 1px solid var(--vscode-menu-border);
+            box-shadow: 0 2px 8px var(--vscode-widget-shadow);
+            font-family: var(--vscode-font-family);
+        }
+        #context-menu button {
+            width: 100%;
+            padding: 4px 20px;
+            color: var(--vscode-menu-foreground);
+            background: transparent;
+            border: 0;
+            font: inherit;
+            text-align: left;
+        }
+        #context-menu button:hover,
+        #context-menu button:focus {
+            color: var(--vscode-menu-selectionForeground);
+            background: var(--vscode-menu-selectionBackground);
+            outline: none;
+        }
     </style>
 </head>
 <body class="fit-width">
-    <div id="canvas"><img id="image" src="${escapeHtml(src)}" alt=""></div>
+    <div id="canvas"><img id="image" src="${escapeHtml(src)}" crossorigin="anonymous" tabindex="0" alt=""></div>
     <div id="error">Unable to load the SVG.</div>
+    <div id="context-menu" role="menu" hidden><button type="button" role="menuitem">Copy</button></div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const canvas = document.getElementById('canvas');
         const image = document.getElementById('image');
+        const contextMenu = document.getElementById('context-menu');
+        const copyButton = contextMenu.querySelector('button');
         const levels = ${JSON.stringify(ZOOM_LEVELS)};
         ${numericZoomLayout.toString()}
+        ${rasterLayout.toString()}
         let zoom = vscode.getState()?.zoom ?? ${JSON.stringify(DEFAULT_ZOOM)};
         if (zoom === 'fit') {
             zoom = ${JSON.stringify(DEFAULT_ZOOM)};
             vscode.setState({ zoom });
+        }
+        let copyInFlight = false;
+
+        function isImageReady() {
+            return image.complete && image.naturalWidth && image.naturalHeight;
         }
 
         function labelDimensions() {
@@ -332,6 +373,64 @@ class SvgPreviewProvider {
             applyZoom(next ?? (direction > 0 ? levels.at(-1) : levels[0]));
         }
 
+        function rasterizeImage(layout) {
+            const canvas = document.createElement('canvas');
+            canvas.width = layout.width;
+            canvas.height = layout.height;
+            const context = canvas.getContext('2d');
+            if (!context) {
+                throw new Error('Unable to create a canvas context');
+            }
+            context.drawImage(image, 0, 0, layout.width, layout.height);
+            return new Promise((resolve, reject) => {
+                canvas.toBlob(blob => {
+                    canvas.width = 0;
+                    canvas.height = 0;
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Unable to encode the image as PNG'));
+                    }
+                }, 'image/png');
+            });
+        }
+
+        async function copyImage() {
+            if (copyInFlight) {
+                return;
+            }
+            copyInFlight = true;
+
+            try {
+                if (!isImageReady()) {
+                    throw new Error('The SVG image is not loaded');
+                }
+                if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+                    throw new Error('Image clipboard writes are not supported');
+                }
+
+                const bounds = image.getBoundingClientRect();
+                const layout = rasterLayout(
+                    image.naturalWidth,
+                    image.naturalHeight,
+                    bounds.width,
+                    bounds.height,
+                    devicePixelRatio
+                );
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': rasterizeImage(layout) })
+                ]);
+                if (layout.downscaled) {
+                    vscode.postMessage({ type: 'copyDownscaled' });
+                }
+            } catch (error) {
+                console.error('Unable to copy SVG preview', error);
+                vscode.postMessage({ type: 'copyError' });
+            } finally {
+                copyInFlight = false;
+            }
+        }
+
         image.addEventListener('load', () => {
             document.body.classList.remove('error');
             applyZoom(zoom, false);
@@ -346,6 +445,82 @@ class SvgPreviewProvider {
             document.body.classList.add('error');
         });
 
+        let contextMenuInvoker;
+
+        function hideContextMenu(restoreFocus = false) {
+            contextMenu.hidden = true;
+            if (restoreFocus) {
+                contextMenuInvoker?.focus?.();
+            }
+            contextMenuInvoker = undefined;
+        }
+
+        document.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            if (!isImageReady()) {
+                hideContextMenu();
+                return;
+            }
+            contextMenuInvoker = event.target;
+            contextMenu.hidden = false;
+
+            const menuBounds = contextMenu.getBoundingClientRect();
+            let x = event.clientX;
+            let y = event.clientY;
+            if (!x && !y) {
+                const imageBounds = image.getBoundingClientRect();
+                x = imageBounds.left + 16;
+                y = imageBounds.top + 16;
+            }
+            contextMenu.style.left = Math.max(0, Math.min(x, innerWidth - menuBounds.width)) + 'px';
+            contextMenu.style.top = Math.max(0, Math.min(y, innerHeight - menuBounds.height)) + 'px';
+            copyButton.focus();
+        });
+
+        copyButton.addEventListener('click', () => {
+            hideContextMenu(true);
+            copyImage();
+        });
+
+        document.addEventListener('pointerdown', event => {
+            if (!contextMenu.contains(event.target)) {
+                hideContextMenu();
+            }
+        }, true);
+
+        document.addEventListener('keydown', event => {
+            if (contextMenu.hidden) {
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                hideContextMenu(true);
+            } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                event.preventDefault();
+                copyButton.focus();
+            } else if (event.key === 'Tab') {
+                hideContextMenu();
+            }
+        });
+
+        contextMenu.addEventListener('focusout', event => {
+            if (!contextMenu.contains(event.relatedTarget)) {
+                hideContextMenu();
+            }
+        });
+
+        document.addEventListener('copy', event => {
+            const selection = window.getSelection();
+            if (!isImageReady() || selection && !selection.isCollapsed) {
+                return;
+            }
+            event.preventDefault();
+            copyImage();
+        });
+
+        window.addEventListener('blur', () => hideContextMenu());
+        window.addEventListener('scroll', () => hideContextMenu(), true);
+
         window.addEventListener('message', event => {
             const message = event.data;
             if (message.type === 'setZoom') {
@@ -355,6 +530,7 @@ class SvgPreviewProvider {
             } else if (message.type === 'zoomOut') {
                 stepZoom(-1);
             } else if (message.type === 'reload') {
+                hideContextMenu();
                 image.src = message.src;
             }
         });
@@ -362,6 +538,29 @@ class SvgPreviewProvider {
 </body>
 </html>`;
     }
+}
+
+/**
+ * @param {number} naturalWidth
+ * @param {number} naturalHeight
+ * @param {number} renderedWidth
+ * @param {number} renderedHeight
+ * @param {number} pixelRatio
+ */
+function rasterLayout(naturalWidth, naturalHeight, renderedWidth, renderedHeight, pixelRatio) {
+    const requestedWidth = Math.max(naturalWidth, Math.round(renderedWidth * pixelRatio));
+    const requestedHeight = Math.max(naturalHeight, Math.round(renderedHeight * pixelRatio));
+    const scale = Math.min(
+        1,
+        8192 / requestedWidth,
+        8192 / requestedHeight,
+        Math.sqrt((16 * 1024 * 1024) / (requestedWidth * requestedHeight))
+    );
+    return {
+        width: Math.max(1, Math.floor(requestedWidth * scale)),
+        height: Math.max(1, Math.floor(requestedHeight * scale)),
+        downscaled: scale < 1
+    };
 }
 
 /** @param {number} width @param {number} height @param {number} zoom */
@@ -431,7 +630,9 @@ function deactivate() {}
 module.exports = {
     activate,
     deactivate,
+    SvgPreviewProvider,
     formatFileSize,
     numericZoomLayout,
+    rasterLayout,
     zoomLabel
 };
