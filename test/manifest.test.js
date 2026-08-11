@@ -8,9 +8,9 @@ const { loadExtension } = require('./load-extension');
 const { SUPPORTED_FORMATS } = loadExtension({});
 const editor = manifest.contributes.customEditors[0];
 
-test('uses the image-preview marketplace and command identity', () => {
+test('uses the svg-png-preview marketplace and command identity', () => {
     assert.equal(manifest.publisher, 'jbearak');
-    assert.equal(manifest.name, 'image-preview');
+    assert.equal(manifest.name, 'svg-png-preview');
     assert.equal(manifest.displayName, 'SVG & PNG Preview');
     assert.equal(editor.viewType, 'jbearak.imagePreview');
     assert.equal(editor.displayName, 'SVG & PNG Preview');
