@@ -176,7 +176,6 @@ class SvgPreviewProvider {
 
         const choices = [
             { label: 'Fit Width', zoom: 'fitWidth' },
-            { label: 'Whole Image', zoom: 'fit' },
             { label: 'Actual Size', zoom: 1 },
             ...ZOOM_LEVELS
                 .filter(level => level !== 1)
@@ -261,26 +260,21 @@ class SvgPreviewProvider {
             min-width: 100%;
             min-height: 100%;
             display: flex;
-            justify-content: center;
-            align-items: center;
+            justify-content: flex-start;
+            align-items: flex-start;
             box-sizing: border-box;
+        }
+        body.numeric-zoom #canvas {
+            flex: none;
         }
         #image {
             display: block;
             flex: none;
-        }
-        body.fit-width #canvas {
-            align-items: flex-start;
+            margin: auto;
         }
         body.fit-width #image {
             width: 100%;
             height: auto;
-        }
-        body.fit #image {
-            width: auto;
-            height: auto;
-            max-width: 100vw;
-            max-height: 100vh;
         }
         #error {
             display: none;
@@ -301,9 +295,15 @@ class SvgPreviewProvider {
     <div id="error">Unable to load the SVG.</div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
+        const canvas = document.getElementById('canvas');
         const image = document.getElementById('image');
         const levels = ${JSON.stringify(ZOOM_LEVELS)};
+        ${numericZoomLayout.toString()}
         let zoom = vscode.getState()?.zoom ?? ${JSON.stringify(DEFAULT_ZOOM)};
+        if (zoom === 'fit') {
+            zoom = ${JSON.stringify(DEFAULT_ZOOM)};
+            vscode.setState({ zoom });
+        }
 
         function labelDimensions() {
             return image.naturalWidth + 'x' + image.naturalHeight;
@@ -321,21 +321,23 @@ class SvgPreviewProvider {
 
         function applyZoom(nextZoom, report = true) {
             zoom = nextZoom;
-            document.body.classList.remove('fit-width', 'fit', 'error');
+            document.body.classList.toggle('fit-width', zoom === 'fitWidth');
+            document.body.classList.toggle('numeric-zoom', zoom !== 'fitWidth');
+            canvas.style.width = '';
+            canvas.style.height = '';
             image.style.width = '';
             image.style.height = '';
-            image.style.maxWidth = '';
-            image.style.maxHeight = '';
 
             if (zoom === 'fitWidth') {
                 document.body.classList.add('fit-width');
-            } else if (zoom === 'fit') {
-                document.body.classList.add('fit');
             } else {
                 const width = image.naturalWidth || image.clientWidth || 1;
                 const height = image.naturalHeight || image.clientHeight || 1;
-                image.style.width = Math.round(width * zoom) + 'px';
-                image.style.height = Math.round(height * zoom) + 'px';
+                const layout = numericZoomLayout(width, height, zoom);
+                image.style.width = layout.imageWidth;
+                image.style.height = layout.imageHeight;
+                canvas.style.width = layout.canvasWidth;
+                canvas.style.height = layout.canvasHeight;
             }
 
             vscode.setState({ zoom });
@@ -442,6 +444,18 @@ class SvgPreviewProvider {
     }
 }
 
+/** @param {number} width @param {number} height @param {number} zoom */
+function numericZoomLayout(width, height, zoom) {
+    const scaledWidth = Math.round(width * zoom);
+    const scaledHeight = Math.round(height * zoom);
+    return {
+        imageWidth: `${scaledWidth}px`,
+        imageHeight: `${scaledHeight}px`,
+        canvasWidth: `max(100%, ${scaledWidth}px)`,
+        canvasHeight: `max(100%, ${scaledHeight}px)`
+    };
+}
+
 /** @param {number} bytes */
 function formatFileSize(bytes) {
     if (bytes < 1024) {
@@ -457,9 +471,6 @@ function formatFileSize(bytes) {
 function zoomLabel(zoom) {
     if (zoom === 'fitWidth') {
         return 'Fit Width';
-    }
-    if (zoom === 'fit') {
-        return 'Whole Image';
     }
     return `${Math.round(Number(zoom) * 100)}%`;
 }
@@ -503,5 +514,6 @@ module.exports = {
     deactivate,
     SvgPreviewProvider,
     formatFileSize,
+    numericZoomLayout,
     zoomLabel
 };

@@ -7,7 +7,7 @@ current editor background instead of a checkerboard.
 
 - Uses `var(--vscode-editor-background)` behind the SVG.
 - Opens at **Fit Width** by default.
-- Offers Fit Width, Whole Image, Actual Size, and percentage zoom levels.
+- Offers Fit Width, Actual Size, and percentage zoom levels.
 - Shows zoom, intrinsic dimensions, and file size in the status bar.
 - Refreshes when an SVG changes on disk.
 - Copies the rendered SVG as a transparent PNG from the preview context menu.
