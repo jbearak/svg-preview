@@ -24,3 +24,8 @@ Click **Fit** in the status bar to choose another zoom level. **Fit Width** fill
 the available width and allows vertical scrolling for tall images. The command
 palette also provides **SVG & PNG Preview: Zoom In** and
 **SVG & PNG Preview: Zoom Out**.
+
+## License
+
+Copyright (c) 2026 Jonathan Marc Bearak. Licensed under the GNU General Public License,
+version 3. See [LICENSE](LICENSE).
